@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Population Estimator</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
+  <style>
+    #map { height: 600px; }
+    .population-info { margin-top: 20px; background-color: white; padding: 10px; border: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="population-info" class="population-info"></div>
+<div id="street-list" class="population-info"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
+<script>
+  var map = L.map('map').setView([51.505, -0.09], 13);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+  }).addTo(map);
+
+  var drawnItems = new L.FeatureGroup();
+  map.addLayer(drawnItems);
+
+  var drawControl = new L.Control.Draw({
+    draw: {
+      polygon: true,
+      polyline: false,
+      marker: false,
+      circle: false,
+      circlemarker: false,
+      rectangle: false
+    },
+    edit: {
+      featureGroup: drawnItems
+    }
+  });
+  map.addControl(drawControl);
+
+  map.on('draw:drawstart', function (e) {
+    drawnItems.clearLayers();
+    document.getElementById('street-list').innerHTML = ''; // Clear street list when drawing starts
+  });
+
+  map.on('draw:created', function (e) {
+    var layer = e.layer;
+    drawnItems.addLayer(layer);
+    updateStreetList(layer);
+  });
+
+  function updateStreetList(layer) {
+    var polygonPoints = layer.getLatLngs()[0].map(point => `${point.lat} ${point.lng}`).join(' ');
+    var query = `[out:json];
+      way["highway"](poly:"${polygonPoints}");
+      out;
+    `;
+
+    fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      body: query
+    })
+    .then(response => response.json())
+    .then(data => {
+      var streets = new Set();
+      data.elements.forEach(function(element) {
+        if (element.tags && element.tags.highway && element.tags.name) {
+          streets.add(element.tags.name);
+        }
+      });
+      var sortedStreets = Array.from(streets).sort(); // Sort streets alphabetically
+      document.getElementById('street-list').innerHTML = "<strong>List of Streets:</strong><br/>" + sortedStreets.join("<br/>");
+    })
+    .catch(error => console.error('Error:', error));
+  }
+</script>
+
+</body>
+</html>
